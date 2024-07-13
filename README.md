@@ -42,8 +42,8 @@ The `config.lua` file allows you to customize various aspects of the Repair Shop
 ## Installation
 
 1. Ensure `es_extended`, `oxmysql`, and `ox_lib` are installed.
-2. Place the `repair_shops` folder into your server's resources directory.
-3. Add `ensure repair_shops` to your `server.cfg`.
+2. Place the `grave_pedrepair` folder into your server's resources directory.
+3. Add `ensure grave_pedrepair` to your `server.cfg`.
 4. Import `shops.sql` to your MySQL database.
 
 ## Usage

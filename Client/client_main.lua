@@ -3,6 +3,12 @@ local repairInProgress = false
 local mechanicPed = nil
 local blips = {}
 
+-- Constants for magic numbers
+local INTERACT_KEY = 38 -- E key
+local MARKER_TYPE = 36
+local MARKER_DISTANCE = 35
+local INTERACTION_DISTANCE = 2
+
 -- Load repair shops from the server callback
 Citizen.CreateThread(function()
     while ESX == nil do
@@ -47,7 +53,6 @@ function RefreshBlips()
     end)
 end
 
-
 -- Function to handle ped spawning and actions
 function pedmodel(playerPed, vehicle, location)
     local pedModel = GetHashKey(Config.pedModel)
@@ -77,7 +82,62 @@ function pedmodel(playerPed, vehicle, location)
     end
 end
 
--- Main loop to handle player interactions with repair shops
+local isNearShop = false -- Track whether the player is near a shop
+local lastNotification = false -- Track if the notification is shown
+
+-- Main loop to handle player interactions with repair shops 
+Citizen.CreateThread(function()
+    while true do
+        Citizen.Wait(10) 
+        local playerPed = PlayerPedId()
+        local coords = GetEntityCoords(playerPed)
+        isNearShop = false -- Reset for each iteration
+
+        for name, shop in pairs(Config.RepairShops) do
+            if shop.repairSpot then
+                local distance = GetDistanceBetweenCoords(coords, shop.repairSpot.x, shop.repairSpot.y, shop.repairSpot.z, true)
+                
+                if distance < INTERACTION_DISTANCE then
+                    isNearShop = true -- Set the flag if player is near a shop
+
+                    if not lastNotification then
+                        ESX.ShowHelpNotification(Strings.HelpNotification) -- Show notification only once
+                        lastNotification = true -- Track that notification is shown
+                    end
+
+                    if IsControlJustReleased(0, INTERACT_KEY) then -- E key is pressed
+                        if IsPedOnFoot(playerPed) then
+                            ESX.ShowNotification(Strings.OnFoot) -- Notify the player they're on foot
+                        else
+                            if not repairInProgress then
+                                repairInProgress = true
+                                if Config.RequireMechanicOnline then
+                                    ESX.TriggerServerCallback('checkLS', function(lsRequired)
+                                        if not lsRequired then
+                                            handleRepair(playerPed, shop)
+                                        else
+                                            ESX.ShowNotification(Strings.MechanicsonDuty)
+                                            repairInProgress = false
+                                        end
+                                    end, Config.LSJobName, Config.LSRequired)
+                                else
+                                    handleRepair(playerPed, shop)
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+
+        -- Reset notification if player is not near a shop
+        if not isNearShop and lastNotification then
+            lastNotification = false
+        end
+    end
+end)
+
+-- Loop for rendering the marker
 Citizen.CreateThread(function()
     while true do
         Citizen.Wait(0)
@@ -87,60 +147,34 @@ Citizen.CreateThread(function()
         for name, shop in pairs(Config.RepairShops) do
             if shop.repairSpot then
                 local distance = GetDistanceBetweenCoords(coords, shop.repairSpot.x, shop.repairSpot.y, shop.repairSpot.z, true)
-                if distance < 35 then
-                    DrawMarker(36, shop.repairSpot.x, shop.repairSpot.y, shop.repairSpot.z, 0, 0, 0, 0, 0, 0, 2.4, 2.4, 2.4, 0, 255, 0, 155, false, false, 2, false, false, false, false)
-                end
-                if distance < 2 then
-                    ESX.ShowHelpNotification(Strings.HelpNotification)
-                end
-                if distance < 2 and IsPedOnFoot(playerPed) and IsControlJustReleased(0, 38) then
-                    ESX.ShowNotification(Strings.OnFoot)
-                else
-                    if distance < 2 and IsControlJustReleased(0, 38) then
-                        if not repairInProgress then
-                            repairInProgress = true
-                            if Config.RequireMechanicOnline then
-                                ESX.TriggerServerCallback('checkLS', function(lsRequired)
-                                    if not lsRequired then
-                                        handleRepair(playerPed, shop)
-                                    else
-                                        ESX.ShowNotification(Strings.MechanicsonDuty)
-                                        repairInProgress = false
-                                    end
-                                end, Config.LSJobName, Config.LSRequired)
-                            else
-                                handleRepair(playerPed, shop)
-                            end
-                        end
-                    end
+                if distance < MARKER_DISTANCE then
+                    DrawMarker(MARKER_TYPE, shop.repairSpot.x, shop.repairSpot.y, shop.repairSpot.z, 0, 0, 0, 0, 0, 0, 2.4, 2.4, 2.4, 0, 255, 0, 155, false, false, 2, false, false, false, false)
                 end
             end
         end
     end
 end)
 
+
+
 -- Function to handle repair logic
 function handleRepair(playerPed, shop)
     if IsPedInAnyVehicle(playerPed) then
         ESX.TriggerServerCallback('canAfford', function(canAfford)
             if canAfford then
-                local vehicle = GetVehiclePedIsIn(PlayerPedId(), false)
-                if IsPedInAnyVehicle(playerPed) then
-                    FreezeEntityPosition(vehicle, true)
-                    FreezeEntityPosition(playerPed, true)
-                    DisableAllControlActions(0)
-                    DisableControlAction(0, 38, true)
-                    pedmodel(playerPed, vehicle, shop)
-                    Citizen.Wait(1000)
-                    SetVehicleFixed(vehicle)
-                    SetVehicleDeformationFixed(vehicle)
-                    SetVehicleEngineHealth(vehicle, 1000.0)
-                    FreezeEntityPosition(vehicle, false)
-                    FreezeEntityPosition(playerPed, false)
-                    EnableAllControlActions(0)
-                else
-                    ESX.ShowNotification(Strings.OnFoot)
-                end
+                local vehicle = GetVehiclePedIsIn(playerPed, false)
+                FreezeEntityPosition(vehicle, true)
+                FreezeEntityPosition(playerPed, true)
+                DisableAllControlActions(0)
+                DisableControlAction(0, INTERACT_KEY, true)
+                pedmodel(playerPed, vehicle, shop)
+                Citizen.Wait(1000)
+                SetVehicleFixed(vehicle)
+                SetVehicleDeformationFixed(vehicle)
+                SetVehicleEngineHealth(vehicle, 1000.0)
+                FreezeEntityPosition(vehicle, false)
+                FreezeEntityPosition(playerPed, false)
+                EnableAllControlActions(0)
             else
                 ESX.ShowNotification(Strings.NoMoney)
             end
@@ -151,7 +185,6 @@ function handleRepair(playerPed, shop)
         repairInProgress = false
     end
 end
-
 
 -- Utility function to show advanced notifications
 function ShowAdvancedNotification(icon, sender, title, text)

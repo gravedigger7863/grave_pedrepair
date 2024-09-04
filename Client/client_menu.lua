@@ -5,6 +5,10 @@ local currentAction = nil
 local currentShop = nil
 local blips = {}  -- Initialize blips as an empty table
 
+-- Constants for key bindings
+local INTERACT_KEY = 38 -- E key
+local BACKSPACE_KEY = 177
+
 -- Register the Repair Shop Menu
 local function registerRepairShopMenu()
     lib.registerMenu({
@@ -28,21 +32,11 @@ end
 
 registerRepairShopMenu()
 
-RegisterCommand('managerepairshops', function(source, args, rawCommand)
-    local xPlayer = ESX.GetPlayerData(source)
-
-    if xPlayer and xPlayer.groups and (xPlayer.groups['admin'] or xPlayer.groups['superadmin'] or xPlayer.groups['owner']) then
-        OpenAdminMenu()
-    else
-        TriggerClientEvent('esx:showNotification', source, 'You do not have permission to use this command.')
-    end
-end, false)
-
 function OpenAdminMenu()
     ESX.TriggerServerCallback('grave_pedrepair:getRepairShops', function(repairShops)
-        local elements = {}
-
-        table.insert(elements, {label = 'Add New Repair Shop', args = {action = 'add_new'}})
+        local elements = {
+            {label = 'Add New Repair Shop', args = {action = 'add_new'}}
+        }
 
         for name, _ in pairs(repairShops) do
             table.insert(elements, {label = name, args = {action = 'manage', shopName = name}})
@@ -63,10 +57,8 @@ function OpenNewShopDialog()
         if shopName == nil or shopName == '' then
             ESX.ShowNotification('Invalid name')
         else
-            -- Trigger server event to save the new repair shop
             TriggerServerEvent('grave_pedrepair:addRepairShop', shopName)
-            -- Re-open admin menu to refresh the list
-            Citizen.Wait(500)
+            Citizen.Wait(500)  -- Re-open admin menu to refresh the list
             OpenAdminMenu()
         end
     end
@@ -113,7 +105,6 @@ function OpenShopActionsMenu(shopName)
                 OpenAdminMenu() -- Update menu after deletion
             end
         end, function()
-            -- This function is called when the Backspace key is pressed in a submenu
             OpenAdminMenu()  -- Reopen the main menu
         end)
 
@@ -132,8 +123,7 @@ function OpenChangeShopNameDialog(shopName)
             ESX.ShowNotification('Invalid name or same as current name')
         else
             TriggerServerEvent('grave_pedrepair:changeRepairShopName', shopName, newShopName)
-            -- Re-open admin menu to refresh the list
-            Citizen.Wait(500)
+            Citizen.Wait(500)  -- Re-open admin menu to refresh the list
             OpenAdminMenu()
         end
     end
@@ -142,14 +132,12 @@ end
 -- Event to update repair shop blips
 RegisterNetEvent('grave_pedrepair:updateRepairShopBlips')
 AddEventHandler('grave_pedrepair:updateRepairShopBlips', function()
-    -- Re-open the repair shop menu to refresh blips
-    OpenAdminMenu()
+    OpenAdminMenu() -- Re-open the repair shop menu to refresh blips
 end)
 
 function RefreshBlips()
     ESX.TriggerServerCallback('grave_pedrepair:getRepairShops', function(repairShops)
-        -- Clear existing blips
-        clearOldBlips()
+        clearOldBlips() -- Clear existing blips
 
         -- Create new blips for repair shops
         for name, shop in pairs(repairShops) do
@@ -161,9 +149,7 @@ function RefreshBlips()
                 BeginTextCommandSetBlipName("STRING")
                 AddTextComponentString(name)
                 EndTextCommandSetBlipName(blip)
-
-                -- Store blip handle in the table
-                table.insert(blips, blip)
+                table.insert(blips, blip) -- Store blip handle in the table
             end
         end
 
@@ -172,9 +158,6 @@ function RefreshBlips()
 end
 
 function clearOldBlips()
-    if blips == nil then
-        blips = {}
-    end
     for _, blipHandle in ipairs(blips) do
         RemoveBlip(blipHandle)
     end
@@ -183,10 +166,10 @@ end
 
 Citizen.CreateThread(function()
     while true do
-        Citizen.Wait(0)
+        Citizen.Wait(10)
         if settingLocation then
             ESX.ShowHelpNotification('Press ~INPUT_CONTEXT~ to set the location.')
-            if IsControlJustReleased(0, 38) then  -- E key
+            if IsControlJustReleased(0, INTERACT_KEY) then
                 local coords = GetEntityCoords(PlayerPedId())
                 settingLocation = false
 
@@ -199,11 +182,9 @@ Citizen.CreateThread(function()
                     ESX.ShowNotification('Ped spawn spot set at: ' .. coords)
                 end
 
-                -- Re-open shop actions menu after setting location and refresh it
-                if currentShop then
-                    Citizen.Wait(500)  -- Wait a bit for the server to update
-                    OpenShopActionsMenu(currentShop)
-                end
+                -- Re-open shop actions menu after setting location
+                Citizen.Wait(500)  -- Wait a bit for the server to update
+                OpenShopActionsMenu(currentShop)
 
                 currentAction = nil
                 currentShop = nil
@@ -214,7 +195,7 @@ Citizen.CreateThread(function()
         end
 
         -- Handle Backspace to go back to the main menu
-        if IsControlJustReleased(0, 177) then -- Backspace key
+        if IsControlJustReleased(0, BACKSPACE_KEY) then
             if lib.getOpenMenu() == 'shop_actions_menu' then
                 OpenAdminMenu()  -- Reopen the main menu
             else
@@ -223,4 +204,9 @@ Citizen.CreateThread(function()
             end
         end
     end
+end)
+
+RegisterNetEvent('grave_pedrepair:openAdminMenu')
+AddEventHandler('grave_pedrepair:openAdminMenu', function()
+    OpenAdminMenu()
 end)

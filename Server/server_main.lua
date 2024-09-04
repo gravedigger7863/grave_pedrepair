@@ -23,6 +23,15 @@ local function fetchSqlQuery(query, params, callback)
     end)
 end
 
+-- Function to add money to the society account
+local function addMoneyToSociety(amount)
+    if Config.SharedAccount then
+        TriggerEvent('esx_addonaccount:getSharedAccount', Config.Society, function(account)
+            account.addMoney(amount)
+        end)
+    end
+end
+
 -- Callback to get repair shops from the database
 ESX.RegisterServerCallback('grave_pedrepair:getRepairShops', function(source, cb)
     fetchSqlQuery('SELECT * FROM repair_shops', {}, function(result)
@@ -61,15 +70,6 @@ ESX.RegisterServerCallback('canAfford', function(source, cb, amount)
         cb(false)
     end
 end)
-
--- Function to add money to the society account
-local function addMoneyToSociety(amount)
-    if Config.SharedAccount then
-        TriggerEvent('esx_addonaccount:getSharedAccount', Config.Society, function(account)
-            account.addMoney(amount)
-        end)
-    end
-end
 
 -- Event to add a new repair shop
 RegisterServerEvent('grave_pedrepair:addRepairShop')

@@ -11,10 +11,10 @@ Config.PedAnimationTime = 8000
 
 -------------------------------------Job and Money-------------------------------------
 Config.LSRequired = 1
-Config.LSJobName = "mechanic" 
-Config.Society = "society_mechanic" 
-Config.SharedAccount = true 
-Config.Money = 1500 
+Config.LSJobName = "mechanic"
+Config.Society = "society_mechanic"
+Config.SharedAccount = true
+Config.Money = 1500
 Config.RequireMechanicOnline = false  -- Set to true if you prefer requiring mechanics to be online for the repair to work
 
 -------------------------------------Translation-------------------------------------

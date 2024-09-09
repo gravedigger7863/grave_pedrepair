@@ -30,8 +30,7 @@ end
 -- Function to refresh all blips
 function RefreshBlips()
     ESX.TriggerServerCallback('grave_pedrepair:getRepairShops', function(repairShops)
-        -- Clear existing blips
-        clearOldBlips()
+        clearOldBlips() -- Clear existing blips before adding new ones
 
         -- Create new blips for repair shops
         for name, shop in pairs(repairShops) do
@@ -48,7 +47,6 @@ function RefreshBlips()
                 table.insert(blips, blip)
             end
         end
-
         Config.RepairShops = repairShops
     end)
 end
@@ -56,15 +54,16 @@ end
 -- Function to handle ped spawning and actions
 function pedmodel(playerPed, vehicle, location)
     local pedModel = GetHashKey(Config.pedModel)
-    RequestModel(pedModel)
-    while not HasModelLoaded(pedModel) do
-        Citizen.Wait(1)
+    if not HasModelLoaded(pedModel) then
+        RequestModel(pedModel)
+        while not HasModelLoaded(pedModel) do
+            Citizen.Wait(1)
+        end
     end
 
     mechanicPed = CreatePed(1, pedModel, location.pedSpawn.x, location.pedSpawn.y, location.pedSpawn.z, 36.850395, false, true)
     SetBlockingOfNonTemporaryEvents(mechanicPed, true)
 
-    local vehicleCoords = GetEntityCoords(vehicle)
     local passengerDoor = GetOffsetFromEntityInWorldCoords(vehicle, 1)
 
     TaskGoToCoordAnyMeans(mechanicPed, passengerDoor.x, passengerDoor.y, passengerDoor.z, 1.0, 0, 0, 786603, 0xbf800000)
@@ -82,32 +81,36 @@ function pedmodel(playerPed, vehicle, location)
     end
 end
 
-local isNearShop = false -- Track whether the player is near a shop
-local lastNotification = false -- Track if the notification is shown
+local isNearShop = false
+local lastNotification = false
 
--- Main loop to handle player interactions with repair shops 
+-- Main loop to handle player interactions with repair shops and marker drawing
 Citizen.CreateThread(function()
     while true do
-        Citizen.Wait(10) 
         local playerPed = PlayerPedId()
         local coords = GetEntityCoords(playerPed)
-        isNearShop = false -- Reset for each iteration
+        isNearShop = false
 
         for name, shop in pairs(Config.RepairShops) do
             if shop.repairSpot then
-                local distance = GetDistanceBetweenCoords(coords, shop.repairSpot.x, shop.repairSpot.y, shop.repairSpot.z, true)
-                
+                local distance = #(coords - vector3(shop.repairSpot.x, shop.repairSpot.y, shop.repairSpot.z))
+
+                -- Handle marker drawing and proximity interaction in a single loop
+                if distance < MARKER_DISTANCE then
+                    DrawMarker(MARKER_TYPE, shop.repairSpot.x, shop.repairSpot.y, shop.repairSpot.z, 0, 0, 0, 0, 0, 0, 2.4, 2.4, 2.4, 0, 255, 0, 155, false, false, 2, false, false, false, false)
+                end
+
                 if distance < INTERACTION_DISTANCE then
-                    isNearShop = true -- Set the flag if player is near a shop
+                    isNearShop = true
 
                     if not lastNotification then
-                        ESX.ShowHelpNotification(Strings.HelpNotification) -- Show notification only once
-                        lastNotification = true -- Track that notification is shown
+                        ESX.ShowHelpNotification(Strings.HelpNotification)
+                        lastNotification = true
                     end
 
-                    if IsControlJustReleased(0, INTERACT_KEY) then -- E key is pressed
+                    if IsControlJustReleased(0, INTERACT_KEY) then
                         if IsPedOnFoot(playerPed) then
-                            ESX.ShowNotification(Strings.OnFoot) -- Notify the player they're on foot
+                            ESX.ShowNotification(Strings.OnFoot)
                         else
                             if not repairInProgress then
                                 repairInProgress = true
@@ -130,32 +133,13 @@ Citizen.CreateThread(function()
             end
         end
 
-        -- Reset notification if player is not near a shop
         if not isNearShop and lastNotification then
             lastNotification = false
         end
+
+        Citizen.Wait(isNearShop and 10 or 500) -- Optimize wait time based on proximity
     end
 end)
-
--- Loop for rendering the marker
-Citizen.CreateThread(function()
-    while true do
-        Citizen.Wait(0)
-        local playerPed = PlayerPedId()
-        local coords = GetEntityCoords(playerPed)
-
-        for name, shop in pairs(Config.RepairShops) do
-            if shop.repairSpot then
-                local distance = GetDistanceBetweenCoords(coords, shop.repairSpot.x, shop.repairSpot.y, shop.repairSpot.z, true)
-                if distance < MARKER_DISTANCE then
-                    DrawMarker(MARKER_TYPE, shop.repairSpot.x, shop.repairSpot.y, shop.repairSpot.z, 0, 0, 0, 0, 0, 0, 2.4, 2.4, 2.4, 0, 255, 0, 155, false, false, 2, false, false, false, false)
-                end
-            end
-        end
-    end
-end)
-
-
 
 -- Function to handle repair logic
 function handleRepair(playerPed, shop)
@@ -166,7 +150,6 @@ function handleRepair(playerPed, shop)
                 FreezeEntityPosition(vehicle, true)
                 FreezeEntityPosition(playerPed, true)
                 DisableAllControlActions(0)
-                DisableControlAction(0, INTERACT_KEY, true)
                 pedmodel(playerPed, vehicle, shop)
                 Citizen.Wait(1000)
                 SetVehicleFixed(vehicle)

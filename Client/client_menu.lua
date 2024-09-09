@@ -24,7 +24,6 @@ local function registerRepairShopMenu()
             OpenShopActionsMenu(currentShop)
         end
     end, function()
-        -- Close the menu when backspace is pressed in the main menu
         RefreshBlips()  -- Refresh blips when the menu is closed
         lib.hideMenu()
     end)
@@ -32,11 +31,10 @@ end
 
 registerRepairShopMenu()
 
+-- Function to open the admin menu
 function OpenAdminMenu()
     ESX.TriggerServerCallback('grave_pedrepair:getRepairShops', function(repairShops)
-        local elements = {
-            {label = 'Add New Repair Shop', args = {action = 'add_new'}}
-        }
+        local elements = {{label = 'Add New Repair Shop', args = {action = 'add_new'}}}
 
         for name, _ in pairs(repairShops) do
             table.insert(elements, {label = name, args = {action = 'manage', shopName = name}})
@@ -47,6 +45,7 @@ function OpenAdminMenu()
     end)
 end
 
+-- Function to open new shop dialog
 function OpenNewShopDialog()
     local input = lib.inputDialog('Enter New Shop Name', {
         {type = 'input', label = 'Shop Name', description = 'Name of the new repair shop', required = true}
@@ -54,16 +53,17 @@ function OpenNewShopDialog()
 
     if input then
         local shopName = input[1]
-        if shopName == nil or shopName == '' then
-            ESX.ShowNotification('Invalid name')
-        else
+        if shopName and shopName ~= '' then
             TriggerServerEvent('grave_pedrepair:addRepairShop', shopName)
             Citizen.Wait(500)  -- Re-open admin menu to refresh the list
             OpenAdminMenu()
+        else
+            ESX.ShowNotification('Invalid name')
         end
     end
 end
 
+-- Function to open shop actions menu
 function OpenShopActionsMenu(shopName)
     ESX.TriggerServerCallback('grave_pedrepair:getRepairShops', function(repairShops)
         local shop = repairShops[shopName]
@@ -87,23 +87,7 @@ function OpenShopActionsMenu(shopName)
             position = 'top-right',
             options = elements
         }, function(selected, scrollIndex, args)
-            if args.action == 'set_repair' then
-                settingLocation = true
-                currentAction = 'repairspot'
-                currentShop = shopName
-                ESX.ShowNotification('Run to the location and press E to set the repair spot.')
-            elseif args.action == 'set_pedspawn' then
-                settingLocation = true
-                currentAction = 'pedspawn'
-                currentShop = shopName
-                ESX.ShowNotification('Run to the location and press E to set the ped spawn spot.')
-            elseif args.action == 'change_name' then
-                OpenChangeShopNameDialog(shopName)
-            elseif args.action == 'delete_shop' then
-                TriggerServerEvent('grave_pedrepair:deleteRepairShop', shopName)
-                ESX.ShowNotification('Deleted repair shop: ' .. shopName)
-                OpenAdminMenu() -- Update menu after deletion
-            end
+            HandleShopActions(args.action, shopName)
         end, function()
             OpenAdminMenu()  -- Reopen the main menu
         end)
@@ -112,6 +96,30 @@ function OpenShopActionsMenu(shopName)
     end)
 end
 
+-- Function to handle shop actions
+function HandleShopActions(action, shopName)
+    if action == 'set_repair' then
+        StartSettingLocation('repairspot', shopName, 'Run to the location and press E to set the repair spot.')
+    elseif action == 'set_pedspawn' then
+        StartSettingLocation('pedspawn', shopName, 'Run to the location and press E to set the ped spawn spot.')
+    elseif action == 'change_name' then
+        OpenChangeShopNameDialog(shopName)
+    elseif action == 'delete_shop' then
+        TriggerServerEvent('grave_pedrepair:deleteRepairShop', shopName)
+        ESX.ShowNotification('Deleted repair shop: ' .. shopName)
+        OpenAdminMenu() -- Update menu after deletion
+    end
+end
+
+-- Function to set the repair spot or ped spawn
+function StartSettingLocation(action, shopName, message)
+    settingLocation = true
+    currentAction = action
+    currentShop = shopName
+    ESX.ShowNotification(message)
+end
+
+-- Function to open change shop name dialog
 function OpenChangeShopNameDialog(shopName)
     local input = lib.inputDialog('Enter New Shop Name', {
         {type = 'input', label = 'Shop Name', description = 'Name of the repair shop', value = shopName, required = true}
@@ -119,12 +127,12 @@ function OpenChangeShopNameDialog(shopName)
 
     if input then
         local newShopName = input[1]
-        if newShopName == nil or newShopName == '' or newShopName == shopName then
-            ESX.ShowNotification('Invalid name or same as current name')
-        else
+        if newShopName and newShopName ~= '' and newShopName ~= shopName then
             TriggerServerEvent('grave_pedrepair:changeRepairShopName', shopName, newShopName)
             Citizen.Wait(500)  -- Re-open admin menu to refresh the list
             OpenAdminMenu()
+        else
+            ESX.ShowNotification('Invalid name or same as current name')
         end
     end
 end
@@ -135,11 +143,11 @@ AddEventHandler('grave_pedrepair:updateRepairShopBlips', function()
     OpenAdminMenu() -- Re-open the repair shop menu to refresh blips
 end)
 
+-- Refresh all blips
 function RefreshBlips()
     ESX.TriggerServerCallback('grave_pedrepair:getRepairShops', function(repairShops)
         clearOldBlips() -- Clear existing blips
 
-        -- Create new blips for repair shops
         for name, shop in pairs(repairShops) do
             if shop.repairSpot then
                 local blip = AddBlipForCoord(shop.repairSpot.x, shop.repairSpot.y, shop.repairSpot.z)
@@ -152,11 +160,10 @@ function RefreshBlips()
                 table.insert(blips, blip) -- Store blip handle in the table
             end
         end
-
-        Config.RepairShops = repairShops
     end)
 end
 
+-- Clear old blips
 function clearOldBlips()
     for _, blipHandle in ipairs(blips) do
         RemoveBlip(blipHandle)
@@ -164,9 +171,11 @@ function clearOldBlips()
     blips = {} -- Clear the table after removing all blips
 end
 
+-- Handle location setting logic and backspace interaction
 Citizen.CreateThread(function()
     while true do
-        Citizen.Wait(10)
+        Citizen.Wait(500) -- Optimize CPU usage by waiting longer when no actions are required
+
         if settingLocation then
             ESX.ShowHelpNotification('Press ~INPUT_CONTEXT~ to set the location.')
             if IsControlJustReleased(0, INTERACT_KEY) then
@@ -183,7 +192,7 @@ Citizen.CreateThread(function()
                 end
 
                 -- Re-open shop actions menu after setting location
-                Citizen.Wait(500)  -- Wait a bit for the server to update
+                Citizen.Wait(500)
                 OpenShopActionsMenu(currentShop)
 
                 currentAction = nil
